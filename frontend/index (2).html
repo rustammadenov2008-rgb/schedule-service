@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Расписание пар</title>
+<style>
+  :root{
+    --ink:        #1c2b26;
+    --paper:      #eef1ea;
+    --panel:      #ffffff;
+    --moss:       #2f4538;
+    --moss-dark:  #1e2e26;
+    --amber:      #c98a3b;
+    --line:       #d6ddd3;
+    --muted:      #6b776e;
+    font-family: "Iowan Old Style", "Georgia", serif;
+  }
+  *{ box-sizing:border-box; }
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    min-height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:32px 16px;
+  }
+  .app{
+    width:100%;
+    max-width:520px;
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:4px;
+    overflow:hidden;
+    box-shadow:0 1px 0 var(--line);
+  }
+  header{
+    background:var(--moss);
+    color:#f4f5f0;
+    padding:22px 24px 20px;
+  }
+  header h1{
+    margin:0 0 4px;
+    font-size:1.5rem;
+    font-weight:600;
+    letter-spacing:.2px;
+  }
+  header p{
+    margin:0;
+    font-size:.92rem;
+    color:#c9d3c8;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+
+  .controls{
+    padding:18px 24px;
+    border-bottom:1px solid var(--line);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  .controls label{
+    display:block;
+    font-size:.82rem;
+    color:var(--muted);
+    margin-bottom:6px;
+  }
+  select{
+    width:100%;
+    padding:10px 12px;
+    border:1px solid var(--line);
+    border-radius:3px;
+    background:#fbfcfa;
+    font-size:.95rem;
+    color:var(--ink);
+    font-family: inherit;
+  }
+
+  .chat{
+    padding:20px 24px 8px;
+    min-height:220px;
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  .msg{
+    max-width:85%;
+    padding:12px 14px;
+    border-radius:10px;
+    font-size:.95rem;
+    line-height:1.45;
+  }
+  .msg.bot{
+    background:#f1f4ee;
+    border:1px solid var(--line);
+    align-self:flex-start;
+    border-bottom-left-radius:2px;
+  }
+  .msg.bot .lesson{
+    font-weight:600;
+    color:var(--moss-dark);
+  }
+  .msg.bot .time{
+    color:var(--amber);
+    font-variant-numeric: tabular-nums;
+  }
+  .msg.placeholder{
+    color:var(--muted);
+    font-style:italic;
+    background:none;
+    border:none;
+    padding-left:0;
+  }
+
+  .commands{
+    display:flex;
+    gap:10px;
+    padding:14px 24px 22px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  button{
+    flex:1;
+    padding:11px 14px;
+    border-radius:3px;
+    border:1px solid var(--moss);
+    background:var(--moss);
+    color:#f4f5f0;
+    font-size:.9rem;
+    cursor:pointer;
+    font-family: inherit;
+    transition: background .15s ease;
+  }
+  button.secondary{
+    background:transparent;
+    color:var(--moss-dark);
+  }
+  button:hover{ background:var(--moss-dark); border-color:var(--moss-dark); }
+  button.secondary:hover{ background:#e6ebe2; color:var(--moss-dark); }
+  button:disabled{ opacity:.5; cursor:not-allowed; }
+
+  .day-block + .day-block{ margin-top:10px; }
+  .day-block h3{
+    margin:0 0 6px;
+    font-size:.8rem;
+    color:var(--muted);
+    font-weight:600;
+  }
+  .lesson-row{
+    display:flex;
+    justify-content:space-between;
+    padding:6px 0;
+    border-bottom:1px dashed var(--line);
+    font-size:.92rem;
+  }
+  .lesson-row:last-child{ border-bottom:none; }
+
+  @media (prefers-color-scheme: dark){
+    :root{
+      --paper:#12140f; --panel:#1a1d16; --ink:#e8eae1;
+      --line:#333a2f; --muted:#96a08d; --amber:#e3a55c;
+    }
+    .msg.bot{ background:#20241b; }
+    select{ background:#20241b; color:var(--ink); }
+    button.secondary:hover{ background:#242a1c; }
+  }
+</style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>Расписание пар</h1>
+      <p>Единая база — сайт и Telegram-бот показывают одно и то же</p>
+    </header>
+
+    <div class="controls">
+      <label for="group-select">Ваша группа</label>
+      <select id="group-select">
+        <option value="">Загрузка групп…</option>
+      </select>
+    </div>
+
+    <div class="chat" id="chat">
+      <div class="msg placeholder">Выберите группу и нажмите одну из команд ниже.</div>
+    </div>
+
+    <div class="commands">
+      <button id="btn-now">/now — какая пара сейчас</button>
+      <button id="btn-today" class="secondary">/today — расписание на сегодня</button>
+    </div>
+  </div>
+
+<!-- Подключаем клиент Supabase (UMD-сборка через CDN) -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+// ==========================================================
+//  НАСТРОЙКИ ПОДКЛЮЧЕНИЯ К SUPABASE
+//  Возьмите эти два значения в Supabase → Project Settings → API
+// ==========================================================
+const SUPABASE_URL = "https://YOUR-PROJECT.supabase.co";
+const SUPABASE_ANON_KEY = "YOUR-ANON-PUBLIC-KEY";
+
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const DAY_NAMES = ["Воскресенье", "Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота"];
+
+const chat = document.getElementById("chat");
+const groupSelect = document.getElementById("group-select");
+const btnToday = document.getElementById("btn-today");
+const btnNow = document.getElementById("btn-now");
+
+function addBotMessage(html) {
+  chat.querySelectorAll(".placeholder").forEach(el => el.remove());
+  const div = document.createElement("div");
+  div.className = "msg bot";
+  div.innerHTML = html;
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+// Загружаем список групп при старте
+async function loadGroups() {
+  const { data, error } = await supabaseClient
+    .from("groups")
+    .select("id, name")
+    .order("name");
+
+  groupSelect.innerHTML = "";
+
+  if (error || !data || data.length === 0) {
+    groupSelect.innerHTML = '<option value="">Группы не найдены</option>';
+    return;
+  }
+
+  data.forEach(group => {
+    const opt = document.createElement("option");
+    opt.value = group.id;
+    opt.textContent = group.name;
+    groupSelect.appendChild(opt);
+  });
+}
+
+// day_of_week в базе: 1=Пн ... 6=Сб. JS Date().getDay(): 0=Вс ... 6=Сб.
+function jsDayToDbDay(jsDay) {
+  return jsDay === 0 ? null : jsDay; // воскресенье не хранится в базе
+}
+
+function formatTime(t) {
+  // Postgres возвращает "HH:MM:SS" — обрежем секунды
+  return t ? t.slice(0, 5) : t;
+}
+
+async function handleToday() {
+  const groupId = groupSelect.value;
+  if (!groupId) {
+    addBotMessage("Сначала выберите группу.");
+    return;
+  }
+
+  const jsDay = new Date().getDay();
+  const dbDay = jsDayToDbDay(jsDay);
+
+  if (dbDay === null) {
+    addBotMessage(`Сегодня ${DAY_NAMES[jsDay]} — пар нет.`);
+    return;
+  }
+
+  const { data, error } = await supabaseClient
+    .from("schedule")
+    .select("lesson_number, subject_name, time_start, time_end")
+    .eq("group_id", groupId)
+    .eq("day_of_week", dbDay)
+    .order("lesson_number");
+
+  if (error) {
+    addBotMessage("Не удалось загрузить расписание. Попробуйте позже.");
+    return;
+  }
+
+  if (!data || data.length === 0) {
+    addBotMessage(`На ${DAY_NAMES[jsDay].toLowerCase()} пар не найдено.`);
+    return;
+  }
+
+  const rows = data.map(l =>
+    `<div class="lesson-row"><span class="lesson">${l.lesson_number}. ${l.subject_name}</span>
+     <span class="time">${formatTime(l.time_start)}–${formatTime(l.time_end)}</span></div>`
+  ).join("");
+
+  addBotMessage(`
+    <div class="day-block">
+      <h3>Расписание на ${DAY_NAMES[jsDay].toLowerCase()}</h3>
+      ${rows}
+    </div>
+  `);
+}
+
+async function handleNow() {
+  const groupId = groupSelect.value;
+  if (!groupId) {
+    addBotMessage("Сначала выберите группу.");
+    return;
+  }
+
+  const jsDay = new Date().getDay();
+  const dbDay = jsDayToDbDay(jsDay);
+
+  if (dbDay === null) {
+    addBotMessage("Сегодня выходной — пар нет.");
+    return;
+  }
+
+  const { data, error } = await supabaseClient
+    .from("schedule")
+    .select("lesson_number, subject_name, time_start, time_end")
+    .eq("group_id", groupId)
+    .eq("day_of_week", dbDay)
+    .order("lesson_number");
+
+  if (error) {
+    addBotMessage("Не удалось загрузить расписание. Попробуйте позже.");
+    return;
+  }
+
+  if (!data || data.length === 0) {
+    addBotMessage("На сегодня пар не найдено.");
+    return;
+  }
+
+  const now = new Date();
+  const nowStr = now.toTimeString().slice(0, 8); // "HH:MM:SS"
+
+  const current = data.find(l => nowStr >= l.time_start && nowStr <= l.time_end);
+  if (current) {
+    addBotMessage(`Сейчас идёт ${current.lesson_number} пара: <span class="lesson">${current.subject_name}</span>
+      (<span class="time">${formatTime(current.time_start)}–${formatTime(current.time_end)}</span>)`);
+    return;
+  }
+
+  const next = data.find(l => nowStr < l.time_start);
+  if (next) {
+    addBotMessage(`Сейчас перемена. Следующая пара — <span class="lesson">${next.subject_name}</span>
+      в <span class="time">${formatTime(next.time_start)}</span>.`);
+    return;
+  }
+
+  addBotMessage("На сегодня все пары закончились.");
+}
+
+btnToday.addEventListener("click", handleToday);
+btnNow.addEventListener("click", handleNow);
+
+loadGroups();
+</script>
+</body>
+</html>
